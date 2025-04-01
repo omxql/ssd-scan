@@ -16,3 +16,8 @@ mutation UpdateArtifact {
 curl -X POST "http://your-dgraph-endpoint/graphql" \
      -H "Content-Type: application/json" \
      -d '{"query":"mutation UpdateArtifact { updateArtifact(input: { filter: { artifactName: { eq: \"CONFIG-rel-v1.13.1-main.jar\" } }, set: { artifactName: \"CONFIG-rel-v1.13.1-main\" } }) { numUids } }"}'
+
+
+curl -X POST "http://your-dgraph-endpoint/graphql" \
+     -H "Content-Type: application/json" \
+     -d '{"query":"query queryArtifactScanDetails { queryArtifact(filter: { artifactName: { eq: \"CONFIG-rel-v1.13.1-main\" }, artifactTag: { eq: \"v1.13.1-main\" } }) @cascade(fields: [\"scanData\"]) { scanData(filter: { tool: { eq: \"grype\" }, artifactSha: { eq: \"artifactSha\" } }) @cascade(fields: [\"artifactRisk\"]) { id lastScannedAt artifactRisk { id artifactRiskStatus } artifactRunHistory(first: 1) { id } components(filter: { has: [vulnerabilities] }) { id name version vulnerabilities { id parent ratings summary recommendation published cwes { id } } } } } }"}'
