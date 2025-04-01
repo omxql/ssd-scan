@@ -34,4 +34,8 @@ curl -X POST "http://your-dgraph-endpoint/graphql" \
      -H "Content-Type: application/json" \
      -d '{"query":"mutation DeleteArtifactScanData { deleteArtifactScanData(filter: { artifactSha: { eq: \"a\" } }) { msg numUids } }"}'
 
+curl -X POST "http://your-dgraph-endpoint/graphql" \
+     -H "Content-Type: application/json" \
+     -d '{"query":"mutation DeleteArtifact { deleteArtifact(filter: { artifactName: { eq: \"CONFIG-rel-v1.13.1-main\" } }) { numUids } }"}'
+
 
