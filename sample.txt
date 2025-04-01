@@ -12,3 +12,7 @@ mutation UpdateArtifact {
         numUids
     }
 }
+
+curl -X POST "http://your-dgraph-endpoint/graphql" \
+     -H "Content-Type: application/json" \
+     -d '{"query":"mutation UpdateArtifact { updateArtifact(input: { filter: { artifactName: { eq: \"CONFIG-rel-v1.13.1-main.jar\" } }, set: { artifactName: \"CONFIG-rel-v1.13.1-main\" } }) { numUids } }"}'
