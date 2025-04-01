@@ -25,3 +25,8 @@ curl -X POST "http://your-dgraph-endpoint/graphql" \
 curl -X POST "http://your-dgraph-endpoint/graphql" \
      -H "Content-Type: application/json" \
      -d '{"query":"query QueryArtifact { queryArtifact { id artifactType artifactName artifactTag artifactSha scanData { id artifactSha } } }"}'
+
+curl -X POST "http://your-dgraph-endpoint/graphql" \
+     -H "Content-Type: application/json" \
+     -d '{"query":"query QueryArtifactScanData { queryArtifactScanData { id artifactSha tool artifactDetails { id artifactType artifactName artifactTag artifactSha } } }"}'
+
