@@ -2,3 +2,13 @@ Artifactory URL: https://jfrog.ortseam.com/
 JAR file URL: https://jfrog.ortseam.com/artifactory/prod-smo-maven/com/odc/CONFIG/rel-v1.13.1-main/CONFIG-rel-v1.13.1-main.jar
 
  
+mutation UpdateArtifact {
+    updateArtifact(
+        input: {
+            filter: { artifactName: { eq: "CONFIG-rel-v1.13.1-main.jar" } }
+            set: { artifactName: "CONFIG-rel-v1.13.1-main" }
+        }
+    ) {
+        numUids
+    }
+}
