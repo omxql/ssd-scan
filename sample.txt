@@ -30,3 +30,8 @@ curl -X POST "http://your-dgraph-endpoint/graphql" \
      -H "Content-Type: application/json" \
      -d '{"query":"query QueryArtifactScanData { queryArtifactScanData { id artifactSha tool artifactDetails { id artifactType artifactName artifactTag artifactSha } } }"}'
 
+curl -X POST "http://your-dgraph-endpoint/graphql" \
+     -H "Content-Type: application/json" \
+     -d '{"query":"mutation DeleteArtifactScanData { deleteArtifactScanData(filter: { artifactSha: { eq: \"a\" } }) { msg numUids } }"}'
+
+
