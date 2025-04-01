@@ -101,6 +101,7 @@ curl --location "${SSD_URL}/webhook/v1/ssd" \
 --data '{
   "giturl": "'"$GIT_URL"'",
   "gitbranch": "'"$GIT_BRANCH"'",
+  "tool": "githubactions",
   "jobname": "'"$JOB_BASE_NAME"'",
   "buildnumber": "'"$BUILD_NUMBER"'",
   "joburl": "'"$JOB_URL"'",
