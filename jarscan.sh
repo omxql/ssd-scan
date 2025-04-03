@@ -1,7 +1,10 @@
-:#!/bin/bash
-#Inputs: JfrogArtifactory URL, UserName, Token
+#!/bin/bash
+#Purpose:  This script downloads a Jar file from a web url, and generates sbom file by doing sec scanning the file
+
 #Inputs: Jar Url
-#SSD Url, Team Token
+#Inputs: ArtifactoryUserName, ArtifactoryToken
+#SSDUrl, SSDTeamToken
+#GitUrl, GitBranch
 
 # Assign variables from command-line arguments if available
 JAR_URL=${JAR_URL:-$1}
@@ -12,20 +15,19 @@ SSD_TEAMTOKEN=${SSD_TEAMTOKEN:-$5}
 GIT_URL=${GIT_URL:-$6}
 GIT_BRANCH=${GIT_BRANCH:-$7}
 
+TLS_INSEC=${SKIP_TLS:+-k}
+
 # Check if any variable is unset or empty
 if [[ -z "$JAR_URL" || -z "$ARTIFACTORY_USER" || -z "$ARTIFACTORY_PASS" || -z "$SSD_URL" || -z "$SSD_TEAMTOKEN" ]]; then
     echo "Error: Missing required variables."
     echo "Usage: $0 <JAR_URL> <ARTIFACTORY_USER> <ARTIFACTORY_PASS> <SSD_URL> <SSD_TEAMTOKEN>"
+    echo "[OR] You can set the variables upfront and simply call the script"
+    echo "Usage: $0 "
+    echo "Usage: $0 <JAR_URL>"
     exit 1
 fi
 
 echo "All required variables are set."
-
-#if [ $# -ne 5 ]; then
-#  echo "Error: Insufficient (or excess) arguments are supplied"
-#  echo "Supply 5 arguments: JarArtifactoryUrl, ArtifactoryUser, ArtifactoryPassword, SsdUrl, SsdTeamToken"
-#  exit 1
-#fi
 
 set -e
 
@@ -38,27 +40,61 @@ if ! command -v grype > /dev/null; then
   echo 'Installing grype...'
   #curl -s https://raw.githubusercontent.com/anchore/grype/main/install.sh | sudo bash
   #Above did not work
-  curl -sSLo grype.tar.gz https://github.com/anchore/grype/releases/download/v0.90.0/grype_0.90.0_linux_amd64.tar.gz
+  curl -fsSLo grype.tar.gz https://github.com/anchore/grype/releases/download/v0.90.0/grype_0.90.0_linux_amd64.tar.gz
   [ ! -d grype ] && mkdir -p grype && tar -zxvf  grype.tar.gz -C grype/
   chmod +x grype/grype
   sudo install grype/grype /usr/local/bin/
 fi
-grype --version
+echo "Found $(grype --version)"
 
 # Step2: Download the jar file from Artifactory url
-echo "Fetching the Jar file from ${JAR_URL}"
+echo -e "\nFetching the Jar file from ${JAR_URL}"
 if [ "$SKIP_FETCHJAR" != "true" ]; then
-  curl -sSLO -u${ARTIFACTORY_USER}:${ARTIFACTORY_PASS} ${JAR_URL} 
-  echo "---done"
+  curl $TLS_INSEC -w "%{http_code}" -fSLO -u${ARTIFACTORY_USER}:${ARTIFACTORY_PASS} ${JAR_URL} 
+  if [ $? -eq 0 ]; then
+    echo "...done"
+  fi
 fi
+echo 
 
 # Step3: Perform grype scanning / Generate SBOM for Jar file
-JAR_FILE=$(basename $JAR_URL)
-SBOM_FILE=${JAR_FILE}.sbom.json
-echo $JAR_FILE
-echo $SBOM_FILE
 
-echo "Generating SBOM on the Jar file ..."
+# Prior to scanning and publishing results, extract the appname, version from the filename
+JAR_URLFILE=$(basename $JAR_URL)
+#JAR_FILE="spring-petclinic-rel-v3.5.4-main.jar"
+JAR_FILE=${JAR_FILE:-$JAR_URLFILE}
+#Expected file format
+#APP-NAME-ANY-verpreX.Y.Z-tag.ext #AppName & X.Y part is mandatory, verpre(fix) text is optional, .Z is optional, -tag is optional
+
+#Extracting info from filename
+#JAR_FILE=spring-petclinic-rel-ver3.5.4-main.jar #Example file
+#COMPNAME=spring-petclinic-rel, VERPREFIX=ver, VER=3.5.4, VERSUFFIX=-main
+#Pattern matching with sed
+#sed -E 's/(.*)-([a-zA-Z]*)([0-9]+\.[0-9]+)(\.[0-9]+)?(-[a-zA-Z0-9]+)?.*/\1 \2 \3 \4 \5/'
+# MatchingGroup: \1 - AppName, \2- VerPrefix(optional), \3-Two digit ver, \4-Third digit ver(optional), \5-VerSuffix(optional)
+# Example: spring-petclinic-rel-v3.5.4-snapshot.jar
+# \1=spring-petclinic-rel, \2=v, \3=3.5, \4=.4, \5=-snapshot
+
+APP_NAME=$(echo "$JAR_FILE" | sed -E 's/(.*)-([a-zA-Z]*)([0-9]+\.[0-9]+)(\.[0-9]+)?(-[a-zA-Z0-9]+)?.*/\1/')
+COMP_NAME=$(echo "$JAR_FILE" | sed -E 's/(.*)\..*/\1/')
+COMP_VERPREFIX=$(echo "$JAR_FILE" | sed -E 's/(.*)-([a-zA-Z]*)([0-9]+\.[0-9]+)(\.[0-9]+)?(-[a-zA-Z0-9]+)?.*/\2/')
+COMP_VERSIONXYZ=$(echo "$JAR_FILE" | sed -E 's/(.*)-([a-zA-Z]*)([0-9]+\.[0-9]+)(\.[0-9]+)?(-[a-zA-Z0-9]+)?.*/\3\4/')
+COMP_VERSUFFIX=$(echo "$JAR_FILE" | sed -E 's/(.*)-([a-zA-Z]*)([0-9]+\.[0-9]+)(\.[0-9]+)?(-[a-zA-Z0-9]+)?.*/\5/')
+COMP_VERSION=$(echo "$JAR_FILE" | sed -E 's/(.*)-([a-zA-Z]*)([0-9]+\.[0-9]+)(\.[0-9]+)?(-[a-zA-Z0-9]+)?.*/\2\3\4\5/')
+FILE_NAME=$(echo "$JAR_FILE" | sed -E 's/(.*)\..*/\1/')
+#SBOM_FILE=${JAR_FILE}.sbom.json
+SBOM_FILE=${FILE_NAME}.sbom.json
+FILE_SHA=$(echo -n $JAR_FILE | sha256sum | awk '{print $1}')
+
+echo "JAR_FILE: $JAR_FILE"
+echo "SBOM_FILE: $SBOM_FILE"
+echo "FILE_SHA: $FILE_SHA"
+echo -n "FILE TYPE ($JAR_FILE) => "
+file $JAR_FILE
+
+echo -e "\nGenerating SBOM on the Jar file ..."
+echo "File Type: $JAR_FILE"
+file $JAR_FILE
 grype "$JAR_FILE" --scope all-layers -o cyclonedx-json --file "$SBOM_FILE"
 
 if [ $? -eq 0 ]; then 
@@ -67,32 +103,30 @@ fi
 
 # Step 4: Post grype scan result (SBOM) to SSD
 
-echo "Posting the SBOM result to SSD ..."
-#echo "springpetclinic-3abc-3.4.0-SNAPSHOT.jar" | sed 's/-[0-9][0-9]*\.[0-9].*//'
-COMP_NAME=$(echo "$JAR_FILE" | sed 's/\(-.*\)-[0-9][0-9]*\.[0-9].*/\1/')
-COMP_VERSION=$(echo "$JAR_FILE" | sed 's/.*-\([0-9][0-9]*\.[0-9].*\)\.jar/\1/')
-COMP_SHA=$(echo -n $JAR_FILE | sha256sum | awk '{print $1}')
-echo -e "$COMP_NAME \n$COMP_VERSION \n$COMP_SHA \n"
-
+echo -e "\nPosting the SBOM result to SSD ..."
+echo -e "APP_NAME: $APP_NAME \n$APP_NAME: $COMP_NAME \nCOMP_VERSION: $COMP_VERSION \nFILE_SHA: $FILE_SHA \n"
 set -x
-
-curl --location "${SSD_URL}/webhook/api/v1/sbom?artifactName=${COMP_NAME}&artifactTag=${COMP_VERSION}&artifactSha=${COMP_SHA}&tool=grype" \
+curl $TLS_INSEC -w "%{http_code}" -fLS "${SSD_URL}/webhook/api/v1/sbom?artifactName=${COMP_NAME}&artifactTag=${COMP_VERSION}&artifactSha=${FILE_SHA}&tool=grype" \
      --header 'Content-Type: application/json' \
-     --data-binary "@${SBOM_FILE}" \
-     --header "Authorization: Bearer ${SSD_TEAMTOKEN}"
-if [ $? -eq 0 ]; then
-  echo "...done" 
+     --header "Authorization: Bearer ${SSD_TEAMTOKEN}" \
+     --data-binary "@${SBOM_FILE}"
+RET_CODE="$?"
+set +x
+
+if [ $RET_CODE -eq 0 ]; then
+  echo -e "...done" 
 fi
 
 # Step 5: Trigger a build event to SSD (using curl)
 
-echo "Triggering a build event to SSD ..."
+echo -e "\nTriggering a build event to SSD ..."
 # BOGUS Values just to trigger build event. They are not real
 JOB_BASE_NAME="TerminalCurl_Sample"
 BUILD_NUMBER="$(date +%Y%m%d%H%M%S)"
-JOB_URL="https://sagay-rules.dev/TerminalCurl_Sample/$BUILD_NUMBER"
-
-curl --location "${SSD_URL}/webhook/v1/ssd" \
+CI_HOST="https://ortseam-ci.io"
+JOB_URL="$CI_HOST/$JOB_BASE_NAME/$BUILD_NUMBER"
+set -x
+curl $TLS_INSEC -w "%{http_code}" -fLS "${SSD_URL}/webhook/v1/ssd" \
 --header 'Content-Type: application/json' \
 --data '{
   "giturl": "'"$GIT_URL"'",
@@ -113,8 +147,11 @@ curl --location "${SSD_URL}/webhook/v1/ssd" \
   ]
 }'
 
-if [ $? -eq 0 ]; then
-  echo "...done" 
+RET_CODE="$?"
+set +x
+
+if [ $RET_CODE -eq 0 ]; then
+  echo -e "...done" 
 fi
 
 set +x
